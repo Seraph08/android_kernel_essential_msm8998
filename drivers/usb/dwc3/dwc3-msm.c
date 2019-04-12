@@ -46,6 +46,8 @@
 #include <linux/irq.h>
 #include <linux/extcon.h>
 #include <linux/reset.h>
+#include <linux/cpu_input_boost.h>
+#include <linux/devfreq_boost.h>
 #include <soc/qcom/boot_stats.h>
 
 #include "power.h"
@@ -3404,6 +3406,37 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static bool dwc3_device_has_audio_interface(struct usb_device *udev,
+											struct dwc3_msm *mdwc)
+{
+	struct usb_host_config *conf;
+	int num_configs = udev->descriptor.bNumConfigurations;
+	int i, j, k;
+	struct usb_interface *intf;
+	struct usb_host_interface *altsetting;
+	for (i = 0, conf = udev->config; i < num_configs && conf;
+		(i++, conf++)) {
+		for (j = 0; j < USB_MAXINTERFACES; j++) {
+			intf = conf->interface[j];
+			if (!intf)
+				break;
+			for (k = 0, altsetting = intf->altsetting;
+				k < intf->num_altsetting && altsetting;
+				k++, altsetting++) {
+				if (altsetting->desc.bInterfaceClass
+					== USB_CLASS_AUDIO) {
+					dev_info(&udev->dev,
+						"Audio interface found");
+					pm_stay_awake(mdwc->dev);
+					return true;
+				}
+			}
+		}
+	}
+	pm_relax(mdwc->dev);
+	return false;
+}
+
 static int dwc3_msm_host_notifier(struct notifier_block *nb,
 	unsigned long event, void *ptr)
 {
@@ -3421,6 +3454,11 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 		if (!mdwc->usb_psy)
 			return NOTIFY_DONE;
 	}
+
+	cpu_input_boost_kick_max(500);
+	devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 1250);
+
+	dwc3_device_has_audio_interface(udev, mdwc);
 
 	/*
 	 * For direct-attach devices, new udev is direct child of root hub

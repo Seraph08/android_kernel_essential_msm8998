@@ -854,6 +854,7 @@ static int smb2_dc_set_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+		smblib_set_prop_dc_suspend(chg, val);
 		rc = vote(chg->dc_suspend_votable, WBC_VOTER,
 				(bool)val->intval, 0);
 		break;
@@ -2011,7 +2012,7 @@ static struct smb_irq_info smb2_irqs[] = {
 	},
 	[DCIN_UV_IRQ] = {
 		.name		= "dcin-uv",
-		.handler	= smblib_handle_debug,
+		.handler	= smblib_handle_dcin_uv,
 	},
 	[DCIN_OV_IRQ] = {
 		.name		= "dcin-ov",

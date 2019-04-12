@@ -199,14 +199,14 @@ enum tsens_tm_trip_type {
 #define TSENS_TM_WRITABLE_TRIPS_MASK ((1 << TSENS_TM_TRIP_NUM) - 1)
 
 struct tsens_thrshld_state {
-	enum thermal_device_mode	high_th_state;
-	enum thermal_device_mode	low_th_state;
-	enum thermal_device_mode	crit_th_state;
-	unsigned int			high_adc_code;
-	unsigned int			low_adc_code;
-	int				high_temp;
-	int				low_temp;
-	int				crit_temp;
+	enum thermal_trip_activation_mode	high_th_state;
+	enum thermal_trip_activation_mode	low_th_state;
+	enum thermal_trip_activation_mode	crit_th_state;
+	unsigned int				high_adc_code;
+	unsigned int				low_adc_code;
+	int					high_temp;
+	int					low_temp;
+	int					crit_temp;
 };
 
 struct tsens_tm_device_sensor {
@@ -297,6 +297,7 @@ struct tsens_tm_device {
 	u64				qtimer_val_last_detection_interrupt;
 	u64				qtimer_val_last_polling_check;
 	bool				tsens_critical_poll;
+	bool				tsens_critical_poll_state;
 	struct tsens_tm_device_sensor	sensor[0];
 };
 
@@ -1355,7 +1356,7 @@ static void tsens_poll(struct work_struct *work)
 	unsigned int debug_id = 0, cntrl_id = 0;
 	uint32_t r1, r2, r3, r4, offset = 0, idx = 0;
 	unsigned long temp, flags;
-	unsigned int status, int_mask, int_mask_val;
+	unsigned int status, int_mask, int_mask_val, resched_ms;
 	void __iomem *srot_addr;
 	void __iomem *controller_id_addr;
 	void __iomem *debug_id_addr;
@@ -1378,6 +1379,10 @@ static void tsens_poll(struct work_struct *work)
 	temp = TSENS_DEBUG_DECIDEGC;
 	/* Sensor 0 on either of the controllers */
 	mask = 0;
+
+	if (tmdev->tsens_critical_poll_state) {
+		goto critical_poll;
+	}
 
 	reinit_completion(&tmdev->tsens_rslt_completion);
 
@@ -1414,8 +1419,12 @@ static void tsens_poll(struct work_struct *work)
 	}
 	spin_unlock_irqrestore(&tmdev->tsens_crit_lock, flags);
 
-	if (tmdev->tsens_critical_poll) {
-		msleep(TSENS_DEBUG_POLL_MS);
+critical_poll:
+	if (tmdev->tsens_critical_poll && !tmdev->tsens_critical_poll_state) {
+		tmdev->tsens_critical_poll_state = true;
+		goto re_schedule;
+	} else if (tmdev->tsens_critical_poll) {
+		tmdev->tsens_critical_poll_state = false;
 		sensor_status_addr = TSENS_TM_SN_STATUS(tmdev->tsens_addr);
 
 		spin_lock_irqsave(&tmdev->tsens_crit_lock, flags);
@@ -1575,9 +1584,11 @@ debug_start:
 	}
 
 re_schedule:
-
-	schedule_delayed_work(&tmdev->tsens_critical_poll_test,
-			msecs_to_jiffies(tsens_sec_to_msec_value));
+	resched_ms = tmdev->tsens_critical_poll_state
+		? TSENS_DEBUG_POLL_MS : tsens_sec_to_msec_value;
+	queue_delayed_work(tmdev->tsens_critical_wq,
+		&tmdev->tsens_critical_poll_test,
+		msecs_to_jiffies(resched_ms));
 }
 
 int tsens_mtc_reset_history_counter(unsigned int zone)
@@ -1840,8 +1851,8 @@ static irqreturn_t tsens_tm_critical_irq_thread(int irq, void *data)
 				TSENS_TM_CRITICAL_INT_CLEAR(
 					tm->tsens_addr));
 			critical_thr = true;
-			tm->sensor[i].debug_thr_state_copy.
-					crit_th_state = THERMAL_DEVICE_DISABLED;
+			tm->sensor[i].debug_thr_state_copy.crit_th_state =
+				THERMAL_TRIP_ACTIVATION_DISABLED;
 		}
 		spin_unlock_irqrestore(&tm->tsens_crit_lock, flags);
 
@@ -1922,8 +1933,8 @@ static irqreturn_t tsens_tm_irq_thread(int irq, void *data)
 				TSENS_TM_UPPER_LOWER_INT_CLEAR(
 					tm->tsens_addr));
 			upper_thr = true;
-			tm->sensor[i].debug_thr_state_copy.
-					high_th_state = THERMAL_DEVICE_DISABLED;
+			tm->sensor[i].debug_thr_state_copy.high_th_state =
+				THERMAL_TRIP_ACTIVATION_DISABLED;
 		}
 
 		if ((status & TSENS_TM_SN_STATUS_LOWER_STATUS) &&
@@ -1943,8 +1954,8 @@ static irqreturn_t tsens_tm_irq_thread(int irq, void *data)
 				TSENS_TM_UPPER_LOWER_INT_CLEAR(
 					tm->tsens_addr));
 			lower_thr = true;
-			tm->sensor[i].debug_thr_state_copy.
-					low_th_state = THERMAL_DEVICE_DISABLED;
+			tm->sensor[i].debug_thr_state_copy.low_th_state =
+				THERMAL_TRIP_ACTIVATION_DISABLED;
 		}
 		spin_unlock_irqrestore(&tm->tsens_upp_low_lock, flags);
 
@@ -2021,16 +2032,16 @@ static irqreturn_t tsens_irq_thread(int irq, void *data)
 				TSENS_S0_UPPER_LOWER_STATUS_CTRL_ADDR(
 					tm->tsens_addr + addr_offset));
 			upper_thr = true;
-			tm->sensor[i].debug_thr_state_copy.
-					high_th_state = THERMAL_DEVICE_DISABLED;
+			tm->sensor[i].debug_thr_state_copy.high_th_state =
+				THERMAL_TRIP_ACTIVATION_DISABLED;
 		}
 		if (status & TSENS_SN_STATUS_LOWER_STATUS) {
 			writel_relaxed(threshold | TSENS_LOWER_STATUS_CLR,
 				TSENS_S0_UPPER_LOWER_STATUS_CTRL_ADDR(
 					tm->tsens_addr + addr_offset));
 			lower_thr = true;
-			tm->sensor[i].debug_thr_state_copy.
-					low_th_state = THERMAL_DEVICE_DISABLED;
+			tm->sensor[i].debug_thr_state_copy.low_th_state =
+				THERMAL_TRIP_ACTIVATION_DISABLED;
 		}
 		if (upper_thr || lower_thr) {
 			int temp;
@@ -2418,8 +2429,8 @@ static int tsens_tm_probe(struct platform_device *pdev)
 
 	tmdev->pdev = pdev;
 
-	tmdev->tsens_critical_wq = alloc_workqueue("tsens_critical_wq",
-							WQ_HIGHPRI, 0);
+	tmdev->tsens_critical_wq = create_singlethread_workqueue("tsens_critical_wq");
+
 	if (!tmdev->tsens_critical_wq) {
 		rc = -ENOMEM;
 		goto fail;
@@ -2436,6 +2447,8 @@ static int tsens_tm_probe(struct platform_device *pdev)
 
 	spin_lock_init(&tmdev->tsens_crit_lock);
 	spin_lock_init(&tmdev->tsens_upp_low_lock);
+
+	tmdev->tsens_critical_poll_state = false;
 	tmdev->is_ready = true;
 
 	list_add_tail(&tmdev->list, &tsens_device_list);
@@ -2578,7 +2591,8 @@ static int tsens_thermal_zone_register(struct tsens_tm_device *tmdev)
 		if (tsens_poll_check) {
 			INIT_DEFERRABLE_WORK(&tmdev->tsens_critical_poll_test,
 								tsens_poll);
-			schedule_delayed_work(&tmdev->tsens_critical_poll_test,
+			queue_delayed_work(tmdev->tsens_critical_wq,
+				&tmdev->tsens_critical_poll_test,
 				msecs_to_jiffies(tsens_sec_to_msec_value));
 			init_completion(&tmdev->tsens_rslt_completion);
 			tmdev->tsens_critical_poll = true;

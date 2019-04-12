@@ -12,9 +12,8 @@
 #ifndef __LINUX_BRIDGE_EFF_H
 #define __LINUX_BRIDGE_EFF_H
 
-#include <linux/if.h>
-#include <linux/if_ether.h>
 #include <uapi/linux/netfilter_bridge/ebtables.h>
+
 
 /* return values for match() functions */
 #define EBT_MATCH 0
@@ -124,5 +123,10 @@ extern unsigned int ebt_do_table(struct sk_buff *skb,
 #define CLEAR_BASE_CHAIN_BIT (par->hook_mask &= ~(1 << NF_BR_NUMHOOKS))
 /* True if the target is not a standard target */
 #define INVALID_TARGET (info->target < -NUM_STANDARD_TARGETS || info->target >= 0)
+
+static inline bool ebt_invalid_target(int target)
+{
+	return (target < -NUM_STANDARD_TARGETS || target >= 0);
+}
 
 #endif

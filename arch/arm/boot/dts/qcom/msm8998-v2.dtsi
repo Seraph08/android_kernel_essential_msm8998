@@ -71,7 +71,8 @@
 		<  1670400000 0x04040057 0x08460046 0x2 19 >,
 		<  1747200000 0x0404005b 0x08490049 0x2 20 >,
 		<  1824000000 0x0404005f 0x084c004c 0x3 21 >,
-		<  1900800000 0x04040063 0x094f004f 0x3 22 >;
+		<  1900800000 0x04040063 0x094f004f 0x3 22 >,
+		<  2035200000 0x0404006a 0x09550055 0x3 22 >;
 
 	qcom,perfcl-speedbin0-v0 =
 		<   300000000 0x0004000f 0x01200020 0x1 1 >,
@@ -241,7 +242,8 @@
 		<  1670400 >,
 		<  1747200 >,
 		<  1824000 >,
-		<  1900800 >;
+		<  1900800 >,
+		<  2035200 >;
 
 	qcom,cpufreq-table-4 =
 		<   300000 >,
@@ -287,36 +289,6 @@
 	qcom,hw-timer-hz = <19200000>;
 };
 
-&devfreq_cpufreq {
-	mincpubw-cpufreq {
-		cpu-to-dev-map-0 =
-			< 1900800 1525 >;
-		cpu-to-dev-map-4 =
-			< 2112000 1525 >,
-			< 2342400 5195 >,
-			< 2496000 13763 >;
-		};
-};
-
-&devfreq_memlat_0 {
-	qcom,core-dev-table =
-		<  300000 1525 >,
-		<  595200 3143 >,
-		< 1324800 4173 >,
-		< 1555200 5859 >,
-		< 1747200 5859 >,
-		< 1900800 7759 >;
-};
-
-&devfreq_memlat_4 {
-	qcom,core-dev-table =
-		<  576000  3143 >,
-		< 1132800  4173 >,
-		< 1344000  5859 >,
-		< 1728000  7759 >,
-		< 1958400 11863 >,
-		< 2208000 13763 >;
-};
 &clock_gcc {
 	compatible = "qcom,gcc-8998-v2";
 };
@@ -1199,7 +1171,7 @@
 &msm_gpu {
 	/* Updated chip ID */
 	qcom,chipid = <0x05040001>;
-	qcom,initial-pwrlevel = <6>;
+	qcom,initial-pwrlevel = <7>;
 
 	qcom,gpu-pwrlevels {
 		#address-cells = <1>;
@@ -1265,6 +1237,14 @@
 
 		qcom,gpu-pwrlevel@7 {
 			reg = <7>;
+			qcom,gpu-freq = <180000000>;
+			qcom,bus-freq = <3>;
+			qcom,bus-min = <2>;
+			qcom,bus-max = <5>;
+		};
+
+		qcom,gpu-pwrlevel@8 {
+			reg = <8>;
 			qcom,gpu-freq = <27000000>;
 			qcom,bus-freq = <0>;
 			qcom,bus-min = <0>;

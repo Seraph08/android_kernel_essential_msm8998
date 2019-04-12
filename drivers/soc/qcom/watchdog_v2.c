@@ -32,6 +32,10 @@
 #include <soc/qcom/minidump.h>
 #include <soc/qcom/watchdog.h>
 
+#ifdef CONFIG_ESSENTIAL_APR
+#include <essential/essential_reason.h>
+#endif
+
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -491,6 +495,10 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	unsigned long nanosec_rem;
 	unsigned long long t = sched_clock();
 
+#ifdef CONFIG_ESSENTIAL_APR
+	qpnp_pon_set_restart_reason(REASON_KERNEL_WDOG);
+#endif
+
 	nanosec_rem = do_div(t, 1000000000);
 	printk(KERN_INFO "Watchdog bark! Now = %lu.%06lu\n", (unsigned long) t,
 		nanosec_rem / 1000);
@@ -599,7 +607,7 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 			 * without saving registers.
 			 */
 		}
-	} else {
+	} else if (IS_ENABLED(CONFIG_MSM_MEMORY_DUMP_V2)) {
 		cpu_data = kzalloc(sizeof(struct msm_dump_data) *
 				   num_present_cpus(), GFP_KERNEL);
 		if (!cpu_data) {
